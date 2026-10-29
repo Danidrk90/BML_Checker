@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BML Checker Results</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:#f4f5f7;color:#222}
+header{position:sticky;top:0;background:#0b5ed7;color:#fff;padding:10px 12px;z-index:1}
+h1{font-size:1.1rem;margin:0 0 8px}
+input,select,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:8px;width:100%;margin-bottom:6px}
+.row{display:flex;gap:6px}.row>*{flex:1}
+#count{font-size:.85rem;padding:6px 12px}
+ul{list-style:none;margin:0;padding:0 12px 20px}
+li{background:#fff;border-radius:8px;padding:10px;margin-bottom:8px;box-shadow:0 1px 2px #0002;word-break:break-word}
+.cnic{font-weight:600;font-size:1.05rem}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;color:#fff;margin-left:6px}
+.Invalid{background:#888}.Error{background:#c62828}.Valid{background:#2e7d32}.Other{background:#ef6c00}
+.d{font-size:.8rem;color:#555;margin-top:4px;max-height:3.2em;overflow:hidden}
+</style>
+</head>
+<body>
+<header>
+<h1>BML Checker Results</h1>
+<input type="file" id="file" accept=".csv" multiple>
+<input id="q" type="search" inputmode="numeric" placeholder="Search CNIC or phone number">
+<div class="row">
+<select id="status"><option value="">All statuses</option></select>
+<select id="mode"><option value="contains">Contains</option><option value="starts">Starts with</option><option value="ends">Ends with</option></select>
+</div>
+</header>
+<div id="count">Load one or more result CSV files.</div>
+<ul id="list"></ul>
+<script>
+let rows=[];
+const $=id=>document.getElementById(id);
+function parseCSV(t){
+  const out=[];let r=[],f="",q=false;
+  for(let i=0;i<t.length;i++){
+    const c=t[i];
+    if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c=='"')q=true;
+    else if(c==','){r.push(f);f=""}
+    else if(c=='\n'){r.push(f);out.push(r);r=[];f=""}
+    else if(c!='\r')f+=c;
+  }
+  if(f||r.length){r.push(f);out.push(r)}
+  return out;
+}
+function load(text){
+  const t=parseCSV(text);if(!t.length)return;
+  const h=t[0].map(x=>x.trim().toLowerCase());
+  const ix=n=>h.indexOf(n);
+  const ci=ix("cnic"),si=ix("status"),di=ix("details"),pi=h.findIndex(x=>x.includes("phone")||x.includes("mobile"));
+  if(ci<0)return;
+  for(const r of t.slice(1)){
+    if(!r[ci])continue;
+    rows.push({cnic:r[ci].trim(),status:(si>=0&&r[si]||"Unknown").trim(),
+      details:(di>=0&&r[di]||"").trim(),phone:pi>=0?(r[pi]||"").trim():""});
+  }
+}
+function norm(s){return s.replace(/[\s-]/g,"")}
+function render(){
+  const q=norm($("q").value),st=$("status").value,m=$("mode").value;
+  const res=rows.filter(r=>{
+    if(st&&r.status!==st)return false;
+    if(!q)return true;
+    return [r.cnic,norm(r.phone)].some(v=>m=="starts"?v.startsWith(q):m=="ends"?v.endsWith(q):v.includes(q));
+  });
+  $("count").textContent=`${res.length} of ${rows.length} records`;
+  const ul=$("list");ul.textContent="";
+  for(const r of res.slice(0,500)){
+    const li=document.createElement("li");
+    const a=document.createElement("div");a.className="cnic";a.textContent=r.cnic;
+    const t=document.createElement("span");
+    t.className="tag "+(["Invalid","Error","Valid"].includes(r.status)?r.status:"Other");t.textContent=r.status;
+    a.appendChild(t);li.appendChild(a);
+    if(r.phone){const p=document.createElement("div");p.textContent="Phone: "+r.phone;li.appendChild(p)}
+    if(r.details){const d=document.createElement("div");d.className="d";d.textContent=r.details;li.appendChild(d)}
+    ul.appendChild(li);
+  }
+  if(res.length>500)$("count").textContent+=" (showing first 500, refine search)";
+}
+$("file").onchange=async e=>{
+  rows=[];
+  for(const f of e.target.files)load(await f.text());
+  const s=$("status");s.length=1;
+  [...new Set(rows.map(r=>r.status))].sort().forEach(v=>s.add(new Option(v,v)));
+  render();
+};
+["q","status","mode"].forEach(i=>$(i).oninput=render);
+</script>
+</body>
+</html>
